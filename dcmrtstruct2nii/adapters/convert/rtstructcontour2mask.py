@@ -1,7 +1,8 @@
+import tqdm 
+
 import numpy as np
 from skimage import draw
 import SimpleITK as sitk
-from tqdm.auto import tqdm
 
 from dcmrtstruct2nii.exceptions import ContourOutOfBoundsException
 
@@ -23,7 +24,7 @@ class DcmPatientCoords2Mask():
         np_mask = sitk.GetArrayFromImage(mask)
         np_mask.fill(mask_background)
 
-        for contour in tqdm(rtstruct_contours, unit='contours'):
+        for contour in tqdm.tqdm(rtstruct_contours, total=len(rtstruct_contours), desc="Converting contours to mask"):
             if contour['type'].upper().replace('_','').strip() not in ['CLOSEDPLANAR', 'INTERPOLATEDPLANAR', 'CLOSEDPLANARXOR']:
                 if 'name' in contour:
                     logging.info(f'Skipping contour {contour["name"]}, unsupported type: {contour["type"]}')
@@ -48,8 +49,9 @@ class DcmPatientCoords2Mask():
                 filled_poly = self._poly2mask(pts[:, 0], pts[:, 1], [shape[0], shape[1]])
                 new_mask = np.logical_xor(np_mask[z, :, :], filled_poly)
                 np_mask[z, :, :] = np.where(new_mask, mask_foreground, mask_background)
-            except IndexError:
+            except IndexError as e:
                 # if this is triggered the contour is out of bounds
+                print("Exception during contour to mask conversion: ", e)
                 raise ContourOutOfBoundsException()
             except RuntimeError as e:
                 # this error is sometimes thrown by SimpleITK if the index goes out of bounds
