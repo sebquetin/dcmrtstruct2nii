@@ -31,7 +31,7 @@ class DcmPatientCoords2Mask():
         return draw.polygon2mask(tuple(reversed(shape)),
                                  np.column_stack((coords_y, coords_x)))
 
-    def convert(self, rtstruct_contours, dicom_image, mask_background, mask_foreground, multiprocessing:bool=True):
+    def convert(self, rtstruct_contours, dicom_image, mask_background, mask_foreground, maskname:str, multiprocessing:bool=True):
         shape = dicom_image.GetSize()
 
         mask = sitk.Image(shape, sitk.sitkUInt8)
@@ -41,11 +41,7 @@ class DcmPatientCoords2Mask():
         np_mask.fill(mask_background)
 
         slice_dict = {}
-
-        for contour in tqdm.tqdm(rtstruct_contours,
-                                 total=len(rtstruct_contours),
-                                 desc="Preparing contours"):
-
+        for contour in rtstruct_contours:         
             if contour['type'].upper().replace('_', '').strip() not in [
                 'CLOSEDPLANAR', 'INTERPOLATEDPLANAR', 'CLOSEDPLANARXOR'
             ]:
@@ -76,24 +72,23 @@ class DcmPatientCoords2Mask():
         ]
         if multiprocessing:
             # each slice processed in parallel
-            with mp.Pool(mp.cpu_count()) as pool:
-                results = list(tqdm.tqdm(
+            with mp.Pool(mp.cpu_count(), maxtasksperchild=1) as pool:
+                for z, slice_mask in tqdm.tqdm(
                     pool.imap_unordered(_process_slice, args),
                     total=len(args),
-                    desc="Converting contours to mask (parallel)"
-                ))
+                    desc=f"Converting {maskname} contours to mask (parallel)"
+                ):
+                    if 0 <= z < np_mask.shape[0]:
+                        np_mask[z] = slice_mask
+                    else:
+                        raise ContourOutOfBoundsException()
         else:
-            results = []
-            for arg in tqdm.tqdm(args, total=len(args), desc="Converting contours to mask (sequential)"):
-                results.append(_process_slice(arg))
-                
-
-        # MERGE RESULTS
-        for z, slice_mask in results:
-            if 0 <= z < np_mask.shape[0]:
-                np_mask[z] = slice_mask
-            else:
-                raise ContourOutOfBoundsException()
+            for arg in tqdm.tqdm(args, total=len(args), desc=f"Converting {maskname} contours to mask (sequential)"):
+                z, slice_mask = _process_slice(arg)
+                if 0 <= z < np_mask.shape[0]:
+                    np_mask[z] = slice_mask
+                else:
+                    raise ContourOutOfBoundsException()
 
         mask = sitk.GetImageFromArray(np_mask)  # Avoid redundant calls by moving this here
         return mask

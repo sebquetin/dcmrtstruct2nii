@@ -96,7 +96,7 @@ def dcmrtstruct2nii(rtstruct_file, dicom_file, output_path, structures=None, gzi
             maskname = rtstruct['maskname']
             logging.info(f'Working on mask {maskname}')
             try:
-                mask = dcm_patient_coords_to_mask.convert(rtstruct['sequence'], dicom_image, mask_background_value, mask_foreground_value)
+                mask = dcm_patient_coords_to_mask.convert(rtstruct['sequence'], dicom_image, mask_background_value, mask_foreground_value, maskname)
             except ContourOutOfBoundsException:
                 logging.warning(f'Structure {maskname} is out of bounds, ignoring contour!')
                 continue
